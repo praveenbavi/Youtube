@@ -1,1 +1,77 @@
 
+name: Daily Kids Video
+
+on:
+  schedule:
+    # Runs daily at 8:00 AM IST (02:30 UTC)
+    - cron: "30 2 * * *"
+
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: "Prompt for the kids video"
+        required: false
+        default: "Create a fun, original, child-friendly story about kindness and friendship"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kids-video-factory
+  cancel-in-progress: false
+
+jobs:
+  generate-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      VIDEO_PROMPT: ${{ inputs.prompt || vars.VIDEO_PROMPT || 'Create a fun, original, child-friendly story about kindness and friendship' }}
+      PUBLISH_ENABLED: "false"
+      REQUIRE_AI_IMAGES: ${{ vars.REQUIRE_AI_IMAGES || 'false' }}
+      LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+      LLM_MODEL: ${{ vars.LLM_MODEL }}
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      COMFYUI_BASE_URL: ${{ vars.COMFYUI_BASE_URL }}
+      COMFYUI_WORKFLOW_JSON: ${{ secrets.COMFYUI_WORKFLOW_JSON }}
+      COMFYUI_PROMPT_NODE_ID: ${{ vars.COMFYUI_PROMPT_NODE_ID }}
+      COMFYUI_SAVE_NODE_ID: ${{ vars.COMFYUI_SAVE_NODE_ID }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg espeak-ng
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m unittest discover -v
+
+      - name: Check configuration
+        run: python main.py --check
+
+      - name: Generate video
+        run: python main.py
+
+      - name: Upload generated videos and metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kids-video-${{ github.run_number }}
+          path: output/
+          if-no-files-found: warn
+          retention-days: 7
